@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drift Diagnostics Array</title>
+    <style>
+        :root {
+            --bg-color: #04060a;
+            --container-bg: #090d16;
+            --card-bg: #111726;
+            --text-primary: #f3f4f6;
+            --text-muted: #4b5563;
+            --border-color: #1f293d;
+
+            /* Custom Neon Ring Palette with Reverted Neon Pink Outermost Ring */
+            --color-d0: #ff2a85; /* Neon Pink */
+            --color-d1: #00f2fe; /* Neon Cyan */
+            --color-d2: #3b82f6; /* Electric Blue */
+            --color-m: #a855f7;  /* Deep Purple */
+
+            --status-color: #4a6b5d;
+            --aligned-color: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        /* 1-Second Boot Loading Flicker Animation */
+        @keyframes terminalBoot {
+            0% { opacity: 0.1; filter: saturate(0) brightness(0.3); }
+            10% { opacity: 0.8; }
+            20% { opacity: 0.3; }
+            30% { opacity: 0.9; }
+            45% { opacity: 0.2; }
+            50% { opacity: 1; filter: none; }
+            65% { opacity: 0.4; }
+            70% { opacity: 1; }
+            80% { opacity: 0.3; }
+            85% { opacity: 0.9; }
+            90% { opacity: 1; filter: contrast(1.1); }
+            100% { filter: none; }
+        }
+
+        .dashboard {
+            background-color: var(--container-bg);
+            width: 100%;
+            max-width: 850px;
+            border-radius: 24px;
+            padding: 1.5rem;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            align-items: center;
+            position: relative;
+            animation: terminalBoot 1s ease-out;
+        }
+
+        .system-status {
+            position: absolute;
+            top: 1.5rem;
+            right: 2rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--status-color);
+            letter-spacing: 0.05em;
+            transition: color 0.2s ease, text-shadow 0.2s ease;
+            z-index: 10;
+        }
+
+        .system-status.aligned {
+            color: var(--aligned-color);
+            text-shadow: 0 0 12px rgba(16, 185, 129, 0.7) !important;
+        }
+        .system-status.optimizing {
+            color: var(--status-color);
+        }
+
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: var(--aligned-color);
+            text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            background: var(--card-bg);
+            padding: 1rem;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .input-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .input-wrapper {
+            display: flex;
+            background: #04060a;
+            border-radius: 8px;
+            overflow: hidden;
+            align-items: center;
+            transition: border-color 0.2s ease-in-out;
+        }
+
+        .group-d1 .input-wrapper { border: 1px solid rgba(0, 242, 254, 0.2); }
+        .group-d2 .input-wrapper { border: 1px solid rgba(59, 130, 246, 0.2); }
+        .group-m  .input-wrapper { border: 1px solid rgba(168, 85, 247, 0.2); }
+
+        .group-d1:focus-within { transform: translateX(2px); box-shadow: inset 0 0 10px rgba(0, 242, 254, 0.05); }
+        .group-d1 .input-wrapper:focus-within { border-color: var(--color-d1); box-shadow: 0 0 12px rgba(0, 242, 254, 0.25); }
+
+        .group-d2:focus-within { transform: translateX(2px); box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.05); }
+        .group-d2 .input-wrapper:focus-within { border-color: var(--color-d2); box-shadow: 0 0 12px rgba(59, 130, 246, 0.25); }
+
+        .group-m:focus-within { transform: translateX(2px); box-shadow: inset 0 0 10px rgba(168, 85, 247, 0.05); }
+        .group-m .input-wrapper:focus-within { border-color: var(--color-m);  box-shadow: 0 0 12px rgba(168, 85, 247, 0.25); }
+
+        .input-box {
+            background: transparent;
+            border: none;
+            padding: 0.75rem 0.6rem;
+            font-size: 1.2rem;
+            font-weight: 700;
+            width: 100%;
+            outline: none;
+            text-align: left;
+            -moz-appearance: textfield;
+            color: var(--text-primary);
+        }
+
+        .input-box::-webkit-outer-spin-button,
+        .input-box::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        #input-d1 { color: var(--color-d1); }
+        #input-d2 { color: var(--color-d2); }
+        #input-m  { color: var(--color-m); }
+
+        .btn-container {
+            display: flex;
+            height: 100%;
+            align-self: stretch;
+            align-items: center;
+            justify-content: center;
+            border-left: 1px solid var(--border-color);
+        }
+
+        .custom-btn {
+            background: transparent;
+            border: none;
+            font-size: 1.25rem;
+            font-weight: 700;
+            width: 3rem;
+            height: 100%;
+            min-height: 44px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+
+        .group-d1 .custom-btn { color: var(--color-d1) !important; }
+        .group-d1 .custom-btn:hover { background: rgba(0, 242, 254, 0.08); text-shadow: 0 0 8px var(--color-d1); }
+
+        .group-d2 .custom-btn { color: var(--color-d2) !important; }
+        .group-d2 .custom-btn:hover { background: rgba(59, 130, 246, 0.08); text-shadow: 0 0 8px var(--color-d2); }
+
+        .group-m  .custom-btn { color: var(--color-m) !important; }
+        .group-m  .custom-btn:hover { background: rgba(168, 85, 247, 0.08); text-shadow: 0 0 8px var(--color-m); }
+
+        .custom-btn:active { background: rgba(255, 255, 255, 0.05); }
+
+        .lower-indicators-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.4rem;
+            width: 100%;
+        }
+
+        .memory-indicator {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--status-color);
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 4px rgba(74, 107, 93, 0.2);
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .time-countdown {
+            color: var(--status-color);
+            font-variant-numeric: tabular-nums;
+            transition: color 0.2s ease, text-shadow 0.2s ease;
+        }
+
+        .sub-system-status {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            transition: color 0.2s ease, text-shadow 0.2s ease;
+        }
+
+        /* --- Right Visualization Box --- */
+        .visual-container {
+            background: #010205;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            aspect-ratio: 1 / 1;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: inset 0 4px 30px rgba(0, 0, 0, 0.9);
+            position: relative;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 0.5rem;
+            }
+            .dashboard {
+                display: flex;
+                flex-direction: column-reverse;
+                padding: 1.25rem;
+                border-radius: 16px;
+                gap: 1.5rem;
+            }
+            .control-panel {
+                width: 100%;
+            }
+            .system-status {
+                position: static;
+                text-align: left;
+                margin-bottom: -0.5rem;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div id="statusLabel" class="system-status">System Status: Operational</div>
+
+        <div class="control-panel">
+            <div class="panel-header">
+                <div class="header">
+                    <h1>Drift Diagnostics Array</h1>
+                    <p>Telemetry values are color-coded to their corresponding matrix nodes. Lower parameters toward zero to full-stabilize the system array.</p>
+                </div>
+            </div>
+
+            <div class="input-group group-d1">
+                <label class="input-label" for="input-d1">Signal Dispatch Attenuation</label>
+                <div class="input-wrapper">
+                    <input type="number" id="input-d1" class="input-box" min="0" max="70" value="20">
+                    <div class="btn-container">
+                        <button class="custom-btn" onclick="stepValue('input-d1', -1)">-</button>
+                        <button class="custom-btn" onclick="stepValue('input-d1', 1)">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group group-d2">
+                <label class="input-label" for="input-d2">Orbital Escape Threshold</label>
+                <div class="input-wrapper">
+                    <input type="number" id="input-d2" class="input-box" min="0" max="200" value="65">
+                    <div class="btn-container">
+                        <button class="custom-btn" onclick="stepValue('input-d2', -1)">-</button>
+                        <button class="custom-btn" onclick="stepValue('input-d2', 1)">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group group-m">
+                <label class="input-label" for="input-m">Vector Flux Divergence</label>
+                <div class="input-wrapper">
+                    <input type="number" id="input-m" class="input-box" min="0" max="11" value="2">
+                    <div class="btn-container">
+                        <button class="custom-btn" onclick="stepValue('input-m', -1)">-</button>
+                        <button class="custom-btn" onclick="stepValue('input-m', 1)">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lower-indicators-box">
+                <div class="memory-indicator">
+                    <span>○ Persistent Memory Active</span>
+                    <span id="countdownLabel" class="time-countdown">○ -- Days Rem.</span>
+                </div>
+                <div id="subStatusLabel" class="sub-system-status"></div>
+            </div>
+        </div>
+
+        <div class="visual-container">
+            <canvas id="radarCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('radarCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const inD1 = document.getElementById('input-d1');
+        const inD2 = document.getElementById('input-d2');
+        const inM = document.getElementById('input-m');
+        const statusLabel = document.getElementById('statusLabel');
+        const subStatusLabel = document.getElementById('subStatusLabel');
+        const countdownLabel = document.getElementById('countdownLabel');
+
+        let pulseRadius = 0;
+        let glitchTimer = 0;
+        let isGlitching = false;
+        let glitchOffsetY = 0;
+        let currentDaysRemaining = 300;
+
+        // Target calibrated to March 12, 2027
+        const TARGET_FUTURE_DATE = new Date('March 12, 2027 00:00:00').getTime();
+
+        function calculateCountdown() {
+            const now = new Date().getTime();
+            const gapTime = TARGET_FUTURE_DATE - now;
+
+            if (gapTime <= 0) {
+                currentDaysRemaining = 0;
+                countdownLabel.innerText = "● Target Reached";
+                countdownLabel.style.color = "var(--aligned-color)";
+                countdownLabel.style.textShadow = "0 0 12px rgba(16, 185, 129, 0.7)";
+            } else {
+                currentDaysRemaining = Math.floor(gapTime / (1000 * 60 * 60 * 24));
+                const displayString = currentDaysRemaining < 10 ? `0${currentDaysRemaining}` : currentDaysRemaining;
+                countdownLabel.innerText = `[Abs_Val: ${displayString}]`;
+
+                countdownLabel.style.color = "var(--status-color)";
+                countdownLabel.style.textShadow = "0 0 4px rgba(74, 107, 93, 0.2)";
+            }
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(() => {
+            resizeCanvas();
+            calculateCountdown();
+        }, 50);
+
+        if (localStorage.getItem('flat_d1') !== null) inD1.value = localStorage.getItem('flat_d1');
+        if (localStorage.getItem('flat_d2') !== null) inD2.value = localStorage.getItem('flat_d2');
+        if (localStorage.getItem('flat_m')  !== null) inM.value  = localStorage.getItem('flat_m');
+
+        function stepValue(id, change) {
+            const input = document.getElementById(id);
+            let val = (parseInt(input.value) || 0) + change;
+            const min = parseInt(input.min);
+            const max = parseInt(input.max);
+
+            if (val < min) val = min;
+            if (val > max) val = max;
+
+            input.value = val;
+        }
+
+        function drawConcentricRadar() {
+            const logicalWidth = canvas.width / (window.devicePixelRatio || 1);
+            const logicalHeight = canvas.height / (window.devicePixelRatio || 1);
+
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+            const cx = logicalWidth / 2;
+            const cy = logicalHeight / 2;
+
+            const baseScale = Math.min(logicalWidth, logicalHeight) / 500;
+
+            const d1 = Math.min(Math.max(parseInt(inD1.value) || 0, 0), 70);
+            const d2 = Math.min(Math.max(parseInt(inD2.value) || 0, 0), 200);
+            const m = Math.min(Math.max(parseInt(inM.value) || 0, 0), 11);
+
+            localStorage.setItem('flat_d1', inD1.value);
+            localStorage.setItem('flat_d2', inD2.value);
+            localStorage.setItem('flat_m', inM.value);
+
+            const totalRemaining = d1 + d2 + m;
+            const calculationStep = Math.floor((200 - d2) / 20);
+
+            if (totalRemaining === 0) {
+                statusLabel.innerText = "System Status: Core Aligned";
+                statusLabel.className = "system-status aligned";
+                subStatusLabel.innerText = "○ Phase Shift Initiating";
+                subStatusLabel.style.color = "var(--aligned-color)";
+                subStatusLabel.style.textShadow = "0 0 12px rgba(16, 185, 129, 0.7)";
+            } else if (d1 === 70 && d2 === 200 && m === 11) {
+                statusLabel.innerText = "System Status: Calibration Required";
+                statusLabel.className = "system-status";
+                statusLabel.style.textShadow = "0 0 4px rgba(74, 107, 93, 0.2)";
+                subStatusLabel.innerText = "○ Drift Parameters Undefined";
+                subStatusLabel.style.color = "var(--status-color)";
+                subStatusLabel.style.textShadow = "0 0 4px rgba(74, 107, 93, 0.2)";
+            } else {
+                let shadowAlpha = 0.2 + (calculationStep * 0.06);
+                statusLabel.style.textShadow = `0 0 8px rgba(74, 107, 93, ${shadowAlpha})`;
+                subStatusLabel.style.color = "var(--status-color)";
+                subStatusLabel.style.textShadow = `0 0 8px rgba(74, 107, 93, ${shadowAlpha})`;
+
+                if (calculationStep >= 0 && calculationStep <= 10) {
+                    const nodeCountdown = 10 - calculationStep;
+                    statusLabel.innerText = `System Status: Node ${nodeCountdown} Enabled`;
+                    statusLabel.className = "system-status optimizing";
+                } else {
+                    statusLabel.innerText = "System Status: Optimizing...";
+                    statusLabel.className = "system-status optimizing";
+                }
+
+                if (d1 === 0) {
+                    subStatusLabel.innerText = "○ Threshold Locked";
+                } else {
+                    subStatusLabel.innerText = "○ Drift Parameters Undefined";
+                }
+            }
+
+            // Inverse completion math scaled from 300 days down to 0
+            const targetDifference = Math.max(0, 300 - currentDaysRemaining);
+
+            // CHANGED: Concentric ring ordering sequence re-mapped to align with user requested depths
+            const rings = [
+                { val: d1,               max: 70,  color: '#00f2fe', radius: 190 * baseScale, width: 12 * baseScale, isCountdownRing: false }, // Cyan Outermost
+                { val: d2,               max: 200, color: '#3b82f6', radius: 150 * baseScale, width: 12 * baseScale, isCountdownRing: false }, // Electric Blue
+                { val: m,                max: 11,  color: '#a855f7', radius: 110 * baseScale, width: 12 * baseScale, isCountdownRing: false }, // Deep Purple
+                { val: targetDifference, max: 300, color: '#ff2a85', radius: 70 * baseScale,  width: 12 * baseScale, isCountdownRing: true }  // Pink Innermost
+            ];
+
+            const maxPulse = 260 * baseScale;
+            pulseRadius += 0.8 * baseScale;
+            if (pulseRadius > maxPulse) pulseRadius = 0;
+
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = `rgba(255, 42, 133, ${Math.max(0, 0.40 - (pulseRadius / maxPulse) * 0.40)})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(31, 41, 61, 0.60)';
+            ctx.lineWidth = 1;
+
+            const crosshairSpan = (220 - (calculationStep * 6)) * baseScale;
+            ctx.beginPath(); ctx.moveTo(cx - crosshairSpan, cy); ctx.lineTo(cx + crosshairSpan, cy); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx, cy - crosshairSpan); ctx.lineTo(cx, cy + crosshairSpan); ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(31, 41, 61, 0.4)';
+            const dashGap = (8 + (calculationStep * 1.5)) * baseScale;
+            ctx.setLineDash([4, dashGap]);
+            rings.forEach(ring => {
+                ctx.beginPath();
+                ctx.arc(cx, cy, ring.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+            ctx.setLineDash([]);
+
+            glitchTimer++;
+            const glitchThresholdInterval = 200 + (calculationStep * 90);
+            if (!isGlitching && glitchTimer % Math.floor(glitchThresholdInterval || 200) === 0 && totalRemaining > 0) {
+                isGlitching = true;
+                glitchOffsetY = 0;
+            }
+
+            const scanBounds = 400 * baseScale;
+            if (isGlitching) {
+                glitchOffsetY += 6 * baseScale;
+                const glitchLineWidth = Math.max(1, (4 - (calculationStep * 0.3)) * baseScale);
+                ctx.fillStyle = 'rgba(255, 42, 133, 0.02)';
+                ctx.fillRect(cx - (200 * baseScale), cy - (200 * baseScale) + glitchOffsetY, scanBounds, glitchLineWidth);
+                if (glitchOffsetY > scanBounds) {
+                    isGlitching = false;
+                    glitchTimer = 0;
+                }
+            }
+
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4 * baseScale, 0, Math.PI * 2);
+            ctx.fill();
+
+            rings.forEach(ring => {
+                const proximityRatio = ring.isCountdownRing ? (ring.val / ring.max) : (1 - (ring.val / ring.max));
+                const startAngle = -Math.PI / 2;
+                let endAngle = startAngle + (proximityRatio * Math.PI * 2);
+
+                if (isGlitching && Math.abs((cy - (200 * baseScale) + glitchOffsetY) - (cy + Math.sin(endAngle) * ring.radius)) < (25 * baseScale)) {
+                    endAngle += (Math.random() - 0.5) * 0.08;
+                }
+
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#101524';
+                ctx.lineWidth = ring.width;
+                ctx.beginPath();
+                ctx.arc(cx, cy, ring.radius, 0, Math.PI * 2);
+                ctx.stroke();
+
+                if (proximityRatio > 0) {
+                    ctx.strokeStyle = ring.color;
+                    ctx.lineWidth = ring.width;
+                    ctx.lineCap = 'round';
+                    ctx.shadowBlur = 22;
+                    ctx.shadowColor = ring.color;
+
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, ring.radius, startAngle, endAngle);
+                    ctx.stroke();
+
+                    let particleX = cx + Math.cos(endAngle) * ring.radius;
+                    let particleY = cy + Math.sin(endAngle) * ring.radius;
+
+                    const isThisRingLocked = !ring.isCountdownRing && (ring.val === 0);
+
+                    if (ring.color === '#ff2a85') ctx.fillStyle = '#ff9ebb';
+                    else if (ring.color === '#00f2fe') ctx.fillStyle = isThisRingLocked ? '#ffffff' : '#80f9ff';
+                    else if (ring.color === '#3b82f6') ctx.fillStyle = isThisRingLocked ? '#ffffff' : '#93c5fd';
+                    else ctx.fillStyle = isThisRingLocked ? '#ffffff' : '#e9d5ff';
+
+                    if (isThisRingLocked) {
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = ring.color;
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2.5;
+
+                        const size = 7 * baseScale;
+                        ctx.beginPath();
+                        ctx.moveTo(particleX, particleY - size);
+                        ctx.lineTo(particleX + size, particleY);
+                        ctx.lineTo(particleX, particleY + size);
+                        ctx.lineTo(particleX - size, particleY);
+                        ctx.closePath();
+                        ctx.stroke();
+                    } else {
+                        ctx.shadowBlur = 35;
+                        ctx.shadowColor = ctx.fillStyle;
+                        ctx.beginPath();
+                        ctx.arc(particleX, particleY, ring.width / 2.0, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.shadowBlur = 15;
+                        ctx.beginPath();
+                        ctx.arc(particleX, particleY, ring.width / 2.0, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.shadowBlur = 5;
+                        ctx.shadowColor = '#ffffff';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(particleX, particleY, ring.width / 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            });
+
+            ctx.shadowBlur = 0;
+            requestAnimationFrame(drawConcentricRadar);
+        }
+
+        drawConcentricRadar();
+    </script>
+</body>
+</html>
